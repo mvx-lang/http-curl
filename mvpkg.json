@@ -1,8 +1,8 @@
 {
   "name": "mvx-lang/http-curl",
   "artifact": "http-curl",
-  "version": "1.0.0",
-  "description": "HTTP API for MultiValue BASIC over the curl transport (HTTP.GET, HTTP.GETFILE) \u2014 provides the virtual 'http', implemented on the virtual 'curl'",
+  "version": "1.1.0",
+  "description": "HTTP API for MultiValue BASIC over the curl transport (HTTP.GET, HTTP.POST, HTTP.GETFILE) \u2014 provides the virtual 'http', implemented on the virtual 'curl'",
   "license": "GPL-2.0-only",
   "systems": [
     "udt",

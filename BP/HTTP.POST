@@ -1,0 +1,84 @@
+      SUBROUTINE HTTP.POST(URL, CTYPE, BODY, RESP)
+* mvx-lang/http-curl — POST a body to URL, returning the status and the response.
+* Copyright (C) 2026 Gordon Heydon.  GPL-2.0-only (see ../LICENSE).
+*
+*   RESP<1>  the HTTP status (0 when the transport itself failed)
+*   RESP<2>  response headers — reserved, see the note in HTTP.GET
+*   RESP<3>  the response body
+*
+* CTYPE may be empty, and then it is application/json — which is what every
+* caller in this ecosystem sends and saves each of them stating it.
+*
+* The body is handed to the transport as a STRING and never reaches a command
+* line: the transport writes it to a file of its own and posts that.  See
+* HTTPPOST in mvx-lang/curl-cmd for why -- length limits, two layers of shell
+* quoting, and argv being readable by every user on the box.
+$INCLUDE MVPKG.INC PLATFORM.H
+$IFDEF JBASE
+      DEFFUN HTTPPOST(A, B, C, D)
+$ENDIF
+$IFDEF UDT
+      DEFFUN HTTPPOST(A, B, C, D) CALLING "*HTTPPOST"
+$ENDIF
+$IFDEF UV
+      DEFFUN HTTPPOST(A, B, C, D) CALLING "HTTPPOST"
+$ENDIF
+$IFDEF MVX
+      DEFFUN HTTPPOST(A, B, C, D)
+$ENDIF
+      RESP = ""
+      RESP<1> = 0
+      RESP<2> = ""
+      RESP<3> = ""
+      IF TRIM(URL) = "" THEN RETURN
+      HPCT = TRIM(CTYPE)
+      IF HPCT = "" THEN HPCT = "application/json"
+      HPTMP = "/tmp/httpcurl_post_" : @USERNO
+      RESP<1> = HTTPPOST(URL, HPCT, BODY, HPTMP)
+      HPBODY = ""
+      GOSUB HPREAD
+      RESP<3> = HPBODY
+      GOSUB HPRM
+      RETURN
+
+* HPREAD — HPBODY = the whole of HPTMP.  UniVerse has no OSREAD: it parses
+* `OSREAD X FROM p` as a variable being assigned and says so as "Variable Name
+* (UNDEFINED) unexpected", so OPENSEQ/READSEQ is the equivalent there.
+HPREAD:
+$IFDEF UV
+      OPENSEQ HPTMP TO HPF THEN
+         HPDONE = 0
+         LOOP UNTIL HPDONE DO
+            READSEQ HPLINE FROM HPF THEN
+               IF HPBODY = "" THEN HPBODY = HPLINE ELSE HPBODY := CHAR(10) : HPLINE
+            END ELSE HPDONE = 1
+         REPEAT
+         CLOSESEQ HPF
+      END
+$ENDIF
+$IFDEF JBASE
+      OSREAD HPBODY FROM HPTMP ELSE HPBODY = ""
+$ENDIF
+$IFDEF UDT
+      OSREAD HPBODY FROM HPTMP ELSE HPBODY = ""
+$ENDIF
+$IFDEF MVX
+      HPBODY = OSREAD(HPTMP)
+      IF STATUS() # 0 THEN HPBODY = ""
+$ENDIF
+      RETURN
+
+HPRM:
+$IFDEF JBASE
+      EXECUTE 'rm -f ' : HPTMP CAPTURING HPOUT
+$ENDIF
+$IFDEF UDT
+      EXECUTE '!rm -f "' : HPTMP : '"' CAPTURING HPOUT
+$ENDIF
+$IFDEF UV
+      EXECUTE "SH -c " : CHAR(34) : "rm -f " : HPTMP : CHAR(34) CAPTURING HPOUT
+$ENDIF
+$IFDEF MVX
+      HPGONE = OSDELETE(HPTMP)
+$ENDIF
+      RETURN
