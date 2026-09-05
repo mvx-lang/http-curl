@@ -1,5 +1,5 @@
 http-curl
 1.0.0
 HTTP API for MultiValue BASIC over the curl transport (HTTP.GET, HTTP.GETFILE)
-mvx udt uv jbase
+udt uv jbase
 curl

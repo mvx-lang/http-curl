@@ -22,7 +22,13 @@ place, in the transport, and is not repeated in every consumer.
 
 It also lets the transport differ per platform without the API moving. UniVerse
 has no in-process route to C, so it uses `curl-cmd`; UniData and jBASE can use
-either; MVX links libcurl natively and gets TLS for free.
+either.
+
+**MVX is not supported yet**, and that is a missing transport rather than a
+missing port: nothing provides `curl` there. `mvx-lang/curl` carries a libcurl
+binding — TLS and redirects included — but declares `udt` only. The MVX arms
+here are written and unverified, and the manifest leaves MVX out until there is
+a transport to test them against.
 
 ## API
 

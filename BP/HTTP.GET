@@ -39,6 +39,15 @@ $ENDIF
 $IFDEF UV
       DEFFUN HTTPGETFILE(A, B) CALLING "HTTPGETFILE"
 $ENDIF
+$IFDEF MVX
+* MVX links a package rather than cataloging it, so the transport's name is
+* resolved at link time and needs no CALLING clause.  NOT ENABLED YET: nothing
+* provides `curl` on MVX -- mvx-lang/curl carries a libcurl binding and native
+* mvx sources, but its manifest declares udt only -- so this arm is written and
+* untested, and the manifest leaves mvx out until there is a transport to test
+* it against.
+      DEFFUN HTTPGETFILE(A, B)
+$ENDIF
       RESP = ""
       RESP<1> = 0
       RESP<2> = ""
@@ -94,6 +103,8 @@ $IFDEF UV
       EXECUTE "SH -c " : CHAR(34) : "rm -f " : HGTMP : CHAR(34) CAPTURING HGOUT
 $ENDIF
 $IFDEF MVX
-      CALL OSDELETE(HGTMP)
+* OSDELETE is a FUNCTION here, not a subroutine -- `CALL OSDELETE(p)` does not
+* compile.  Its result is 1 when the file went; nothing depends on that.
+      HGGONE = OSDELETE(HGTMP)
 $ENDIF
       RETURN

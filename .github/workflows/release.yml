@@ -55,7 +55,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        system: [mvx, udt, uv, jbase]
+        system: [udt, uv, jbase]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
