@@ -1,0 +1,99 @@
+      SUBROUTINE HTTP.GET(URL, RESP)
+* mvx-lang/http-curl — GET a URL, returning the status AND the body.
+* Copyright (C) 2026 Gordon Heydon.  GPL-2.0-only (see ../LICENSE).
+*
+*   RESP<1>  the HTTP status (0 when the transport itself failed)
+*   RESP<2>  response headers — reserved, see the note on the transport below
+*   RESP<3>  the response body
+*
+* THIS IS A LAYER, NOT A SECOND TRANSPORT.  The virtual name "http" is the API;
+* the virtual name "curl" is the transport underneath it, provided by
+* mvx-lang/curl-cmd (the OS curl command) or mvx-lang/curl (libcurl in process).
+* Everything platform-shaped -- the shell quoting, jBASE having no shell at all,
+* UniVerse needing SH -c -- lives down there and is not repeated here.  That is
+* the whole point of the split: one HTTP API, either transport, four platforms.
+*
+* WHY THE NAMES DIFFER FROM THE TRANSPORT'S.  The transport exports HTTPGET and
+* HTTPGETFILE.  If this package exported those too they would collide in the
+* catalog -- one shared library on jBASE, one global catalog on UniData, one VOC
+* per account on UniVerse -- and whichever was cataloged last would win.  Worse,
+* this program calls them, so it would eventually call itself.  So the API takes
+* its own names and the transport keeps its own.
+*
+* STATUS AND BODY TOGETHER, which neither transport call gives on its own:
+* HTTPGET returns a body and no status, HTTPGETFILE a status and no body.  So
+* fetch to a temp file for the status, then read the file back for the body.
+$INCLUDE MVPKG.INC PLATFORM.H
+*
+* The transport is resolved by NAME at run time.  jBASE has no
+* `DEFFUN ... CALLING`, and on UniVerse a leading "*" names the GLOBAL catalog
+* while packages are cataloged LOCAL -- so each platform gets the spelling that
+* resolves there.  Flat guards: an $IFDEF nested inside an $ELSE compiles on
+* UniData and fails on UniVerse.
+$IFDEF JBASE
+      DEFFUN HTTPGETFILE(A, B)
+$ENDIF
+$IFDEF UDT
+      DEFFUN HTTPGETFILE(A, B) CALLING "*HTTPGETFILE"
+$ENDIF
+$IFDEF UV
+      DEFFUN HTTPGETFILE(A, B) CALLING "HTTPGETFILE"
+$ENDIF
+      RESP = ""
+      RESP<1> = 0
+      RESP<2> = ""
+      RESP<3> = ""
+      IF TRIM(URL) = "" THEN RETURN
+      HGTMP = "/tmp/httpcurl_" : @USERNO
+      HGST = HTTPGETFILE(URL, HGTMP)
+      RESP<1> = HGST
+      HGBODY = ""
+      GOSUB HGREAD
+      RESP<3> = HGBODY
+      GOSUB HGRM
+      RETURN
+
+* HGREAD — HGBODY = the whole of HGTMP.  UniVerse has no OSREAD: it parses
+* `OSREAD X FROM p` as a variable being assigned and says so as "Variable Name
+* (UNDEFINED) unexpected", so OPENSEQ/READSEQ is the equivalent there.
+HGREAD:
+$IFDEF UV
+      OPENSEQ HGTMP TO HGF THEN
+         HGDONE = 0
+         LOOP UNTIL HGDONE DO
+            READSEQ HGLINE FROM HGF THEN
+               IF HGBODY = "" THEN HGBODY = HGLINE ELSE HGBODY := CHAR(10) : HGLINE
+            END ELSE HGDONE = 1
+         REPEAT
+         CLOSESEQ HGF
+      END
+$ENDIF
+$IFDEF JBASE
+      OSREAD HGBODY FROM HGTMP ELSE HGBODY = ""
+$ENDIF
+$IFDEF UDT
+      OSREAD HGBODY FROM HGTMP ELSE HGBODY = ""
+$ENDIF
+$IFDEF MVX
+      HGBODY = OSREAD(HGTMP)
+      IF STATUS() # 0 THEN HGBODY = ""
+$ENDIF
+      RETURN
+
+* HGRM — drop the temp file.  jBASE's EXECUTE runs an OS command directly with
+* no shell, so there is nothing to quote and quotes would arrive literally;
+* UniVerse needs SH -c; UniData takes "!".
+HGRM:
+$IFDEF JBASE
+      EXECUTE 'rm -f ' : HGTMP CAPTURING HGOUT
+$ENDIF
+$IFDEF UDT
+      EXECUTE '!rm -f "' : HGTMP : '"' CAPTURING HGOUT
+$ENDIF
+$IFDEF UV
+      EXECUTE "SH -c " : CHAR(34) : "rm -f " : HGTMP : CHAR(34) CAPTURING HGOUT
+$ENDIF
+$IFDEF MVX
+      CALL OSDELETE(HGTMP)
+$ENDIF
+      RETURN

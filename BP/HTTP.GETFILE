@@ -1,0 +1,24 @@
+      SUBROUTINE HTTP.GETFILE(URL, PATH, RESP)
+* mvx-lang/http-curl — GET a URL straight to a file, returning the status.
+* Copyright (C) 2026 Gordon Heydon.  GPL-2.0-only (see ../LICENSE).
+*
+*   RESP<1>  the HTTP status (0 when the transport itself failed)
+*
+* The download case, kept separate from HTTP.GET because a package tarball has
+* no business being assembled in memory first.  See HTTP.GET for why this layer
+* exists and why its names differ from the transport's.
+$INCLUDE MVPKG.INC PLATFORM.H
+$IFDEF JBASE
+      DEFFUN HTTPGETFILE(A, B)
+$ENDIF
+$IFDEF UDT
+      DEFFUN HTTPGETFILE(A, B) CALLING "*HTTPGETFILE"
+$ENDIF
+$IFDEF UV
+      DEFFUN HTTPGETFILE(A, B) CALLING "HTTPGETFILE"
+$ENDIF
+      RESP = ""
+      RESP<1> = 0
+      IF TRIM(URL) = "" OR TRIM(PATH) = "" THEN RETURN
+      RESP<1> = HTTPGETFILE(URL, PATH)
+      RETURN

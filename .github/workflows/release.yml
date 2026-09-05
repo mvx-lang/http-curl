@@ -1,0 +1,115 @@
+# Release http-curl on a version tag: publish the source package as a GitHub
+# release asset.  http-curl is pure BASIC and has no native build of its own --
+# everything platform-shaped lives in the curl TRANSPORT it depends on -- so it
+# installs by cataloging BP/HTTP.GET + BP/HTTP.GETFILE and ships one portable
+# source artifact plus a per-system account.  Copyright (C) 2026 Gordon Heydon.  GPL-2.0-only.
+name: release
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+*"
+      # ONE rolling dev tag, moved to the HEAD of develop by the nightly when
+      # there is something new.  It builds through THIS workflow rather than
+      # a second copy of it, so a dev build is the same artifacts by the same
+      # steps as a release -- the only way a dev build is worth having.
+      - "dev"
+  # A TAG PUSHED BY A WORKFLOW DOES NOT TRIGGER ONE.  GitHub will not let the
+  # default GITHUB_TOKEN start another run -- it is how recursion is prevented
+  # -- so the nightly's tag lands and nothing happens.  It dispatches this
+  # workflow on the tag instead, which is the same build from the same ref.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: mvx-lang/mvx/.github/actions/publish-source@main
+        with:
+          package: mvx-lang/http-curl
+          artifact: http-curl
+          title: http-curl
+          body: "http-curl — the HTTP API for MultiValue BASIC (HTTP.GET/HTTP.GETFILE), implemented over the virtual 'curl' transport; provides the virtual 'http'. Pure BASIC; indexed by the package registry."
+
+  # ---- the account artifact, one per system it runs on ------------------------
+  # http-curl is BASIC only -- it shells out nowhere, the transport does -- so the
+# staged account is IDENTICAL for mvx, udt,
+  # uv and jbase -- what differs is only the system name in the artifact key, and
+  # the cataloging, which MVPKG does on the target.  Hence `any-any-le` and a
+  # plain hosted runner: os/arch-locking a package with no native code would pin
+  # it to whichever machine packaged it, and taking a licensed container to copy
+  # six files would make every release depend on the one self-hosted runner.
+  #
+  # Without these the registry serves this package as `source` on every system,
+  # which is what it did for all four ports until now.
+  account:
+    # AFTER source, and ONE AT A TIME.  Each upload creates the release if it is
+    # not there yet, so three of them starting together raced and two lost:
+    #   Validation Failed: {"resource":"Release","code":"already_exists",...}
+    # `needs: source` means the release already exists when these run, and
+    # max-parallel 1 stops them racing each other for the same finalize.  Three
+    # jobs that copy six files each cost nothing serialised.
+    needs: [source]
+    strategy:
+      max-parallel: 1
+      matrix:
+        system: [mvx, udt, uv, jbase]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Stage the ${{ matrix.system }} account
+        id: pkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME}"
+          BASE="http-curl-$VER-${{ matrix.system }}-any-any-le"
+          rm -rf dist && mkdir -p dist
+          sh build-pkg.sh dist
+          tar czf "$BASE.tar.gz" -C dist http-curl
+          sha256sum "$BASE.tar.gz" > "$BASE.tar.gz.sha256"
+          echo "tarball=$BASE.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "checksum=$BASE.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+      - name: Publish the ${{ matrix.system }} account asset
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            ${{ steps.pkg.outputs.tarball }}
+            ${{ steps.pkg.outputs.checksum }}
+          fail_on_unmatched_files: true
+
+  # ---- what kind of release is this? ----------------------------------------
+  # LAST, because it is correcting the publish steps rather than joining them.
+  # Both of them create the release as a side effect of uploading to it, and
+  # neither is told what the release is: publish-source marks a pre-release with
+  # `contains(ref_name, '-')`, which is FALSE for `dev`; udt-build hands
+  # softprops only a tag_name, and its defaults are `prerelease: false` and
+  # latest.  So whichever finishes last decides, and left alone a nightly dev
+  # build would present itself as the newest stable one -- to the registry, and
+  # to anyone installing this package by name.
+  #
+  # Both directions are set explicitly, for the same reason: leaving the stable
+  # case alone means it keeps whatever that race happened to leave behind.
+  mark:
+    needs: [source, account]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Say what this release is
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # STABLE IS THE ONE THAT IS NOT A PRE-RELEASE.  dev, beta and rc all
+          # are; a stable tag is anything with no suffix -- 2.1.0, not
+          # 2.1.0-rc1 and not dev.
+          case "$TAG" in
+            dev|*-*) gh release edit "$TAG" --prerelease --latest=false
+                     echo "$TAG is a pre-release, and not latest." ;;
+            *)       gh release edit "$TAG" --prerelease=false --latest
+                     echo "$TAG is a stable release, and is latest." ;;
+          esac
