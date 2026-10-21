@@ -101,6 +101,10 @@ jobs:
           # And ASSERTED, because a stamper that silently did nothing would
           # leave exactly the bug it is here to prevent.
           if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
+            # IN-TREE, BOTH MANIFESTS SAY 0.0.0-dev (#3).  Deliberately -- a
+            # number committed there can only be stale or coincidentally right,
+            # and this step is why it does not have to be either.  Do not bump
+            # it before a release; tag, and the tag lands in the artifact.
             python3 .mvx-src/.github/actions/publish-source/stamp-manifests.py \
               dist/http-curl "$VER"
             test "$(sed -n 2p dist/http-curl/PKG)" = "$VER"
