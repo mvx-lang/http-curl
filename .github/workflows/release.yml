@@ -59,6 +59,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      # JUST THE STAMPER.  This job compiles nothing, so it needs no toolchain
+      # -- stamp-manifests.py is standalone Python.  Taken from mvx's `main`,
+      # its RELEASED line, which moves when a release merges and not before:
+      # the right coupling for a script with no compiler dependency, and the
+      # opposite of the default branch.
+      - name: Check out the manifest stamper
+        uses: actions/checkout@v5
+        with:
+          repository: mvx-lang/mvx
+          ref: main
+          path: .mvx-src
+          sparse-checkout: .github/actions/publish-source
+          sparse-checkout-cone-mode: false
+
       - name: Stage the ${{ matrix.system }} account
         id: pkg
         shell: bash
@@ -68,6 +83,30 @@ jobs:
           BASE="http-curl-$VER-${{ matrix.system }}-any-any-le"
           rm -rf dist && mkdir -p dist
           sh build-pkg.sh dist
+          # THE TAG IS THE SOURCE OF TRUTH (mvx#363).  build-pkg.sh copies PKG
+          # and mvpkg.json verbatim and nothing wrote the tag into them, which
+          # is how json (#28), mapfield (#14) and curl-cmd (#22) each published
+          # artifacts declaring the wrong version.  THIS REPO HAS NOT DONE SO --
+          # its manifests, mvpkg.json and the 1.1.0 release all agree, checked
+          # from the published artifact -- so this is preventive, and it is here
+          # because being right so far is not a mechanism.
+          #
+          # `source` already stamps: publish-source does it for the source
+          # tarball.  This was the arm that did not.
+          #
+          # STAMPED AFTER STAGING, on the staged copy rather than the tree: the
+          # artifact is what has to be honest, and leaving the checkout alone
+          # keeps this job independent of the order the matrix runs in.
+          #
+          # And ASSERTED, because a stamper that silently did nothing would
+          # leave exactly the bug it is here to prevent.
+          if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
+            python3 .mvx-src/.github/actions/publish-source/stamp-manifests.py \
+              dist/http-curl "$VER"
+            test "$(sed -n 2p dist/http-curl/PKG)" = "$VER"
+          else
+            echo "not a tag (${GITHUB_REF_TYPE:-unset} $VER): manifests left as committed"
+          fi
           tar czf "$BASE.tar.gz" -C dist http-curl
           sha256sum "$BASE.tar.gz" > "$BASE.tar.gz.sha256"
           echo "tarball=$BASE.tar.gz" >> "$GITHUB_OUTPUT"
